@@ -3,10 +3,11 @@ import * as path from 'path';
 import { Construct } from 'constructs';
 import { AssetStaging } from '../asset-staging';
 import { FileAssetPackaging } from '../assets';
-import { CfnResource } from '../cfn-resource';
+import { CfnResource, CfnResourceProps, TagType } from '../cfn-resource';
 import { Duration } from '../duration';
 import { Size } from '../size';
 import { Stack } from '../stack';
+import { ITaggable, TagManager } from '../tag-manager';
 import { Token } from '../token';
 
 const ENTRYPOINT_FILENAME = '__entrypoint__';
@@ -157,6 +158,16 @@ export class CustomResourceProvider extends CoreConstruct {
    */
   public readonly roleArn: string;
 
+  /**
+   * A CfnResource that implements ITaggable so that the provider's resources
+   * correctly apply tags. Tags can be applied with resource type filters, meaning
+   * we can't implement ITaggable on the entire CustomResourceProvider resource
+   * itself as resource types cannot be differentiated at that level.
+   * Both Role and Function take the same CloudFormation tag type so we can
+   * extract the `Type` property for the TagManager.
+   */
+  // private CfnResourceKeyValueTaggable = 
+
   protected constructor(scope: Construct, id: string, props: CustomResourceProviderProps) {
     super(scope, id);
 
@@ -190,7 +201,19 @@ export class CustomResourceProvider extends CoreConstruct {
       },
     ];
 
-    const role = new CfnResource(this, 'Role', {
+    // (Due to cyclic dependencies this has to be nested within this class)
+    class CfnResourceKeyValueTaggable extends CfnResource implements ITaggable {
+      public readonly tags: TagManager;
+
+      constructor(cfnScope: Construct, cfnId: string, cfnProps: CfnResourceProps) {
+        super(cfnScope, cfnId, cfnProps);
+
+        this.tags = new TagManager(TagType.KEY_VALUE, cfnProps.type);
+        this._cfnProperties.Tags = this.tags.renderedTags;
+      }
+    }
+
+    const role = new CfnResourceKeyValueTaggable(this, 'Role', {
       type: 'AWS::IAM::Role',
       properties: {
         AssumeRolePolicyDocument: {
@@ -208,7 +231,7 @@ export class CustomResourceProvider extends CoreConstruct {
     const timeout = props.timeout ?? Duration.minutes(15);
     const memory = props.memorySize ?? Size.mebibytes(128);
 
-    const handler = new CfnResource(this, 'Handler', {
+    const handler = new CfnResourceKeyValueTaggable(this, 'Handler', {
       type: 'AWS::Lambda::Function',
       properties: {
         Code: {

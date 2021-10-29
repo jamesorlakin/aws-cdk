@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { App, AssetStaging, CustomResourceProvider, CustomResourceProviderRuntime, DockerImageAssetLocation, DockerImageAssetSource, Duration, FileAssetLocation, FileAssetSource, ISynthesisSession, Size, Stack } from '../../lib';
+import { App, AssetStaging, CustomResourceProvider, CustomResourceProviderRuntime, DockerImageAssetLocation, DockerImageAssetSource, Duration, FileAssetLocation, FileAssetSource, ISynthesisSession, Size, Stack, Tags } from '../../lib';
 import { toCloudFormation } from '../util';
 
 const TEST_HANDLER = `${__dirname}/mock-provider`;
@@ -251,6 +251,67 @@ describe('custom resource provider', () => {
         'Arn',
       ],
     });
+
+  });
+
+  test('Lambda and Role resources receive tags', () => {
+    // GIVEN
+    const stack = new Stack();
+    Tags.of(stack).add('test-key', 'test-value');
+
+    // WHEN
+    CustomResourceProvider.getOrCreateProvider(stack, 'Custom:MyResourceType', {
+      codeDirectory: TEST_HANDLER,
+      runtime: CustomResourceProviderRuntime.NODEJS_12_X,
+    });
+
+    // THEN
+    const template = toCloudFormation(stack);
+    const resources: { Type: string, Properties: Record<string, any> }[] = Object.values(template.Resources);
+
+    expect(resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Type: 'AWS::Lambda::Function',
+          Properties: expect.objectContaining({
+            Tags: [
+              {
+                Key: 'test-key',
+                Value: 'test-value',
+              },
+            ],
+          }),
+        }),
+      ]),
+    );
+    expect(resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Type: 'AWS::IAM::Role',
+          Properties: expect.objectContaining({
+            Tags: [
+              {
+                Key: 'test-key',
+                Value: 'test-value',
+              },
+            ],
+          }),
+        }),
+      ]),
+    );
+    expect(resources).toEqual(
+      expect.arrayContaining([{
+        Type: 'AWS::IAM::Role',
+        Properties: expect.objectContaining({
+          Tags: [
+            {
+              Key: 'test-key',
+              Value: 'test-value',
+            },
+          ],
+        }),
+      }]),
+    );
 
   });
 });

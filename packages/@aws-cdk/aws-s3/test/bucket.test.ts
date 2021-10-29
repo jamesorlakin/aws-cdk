@@ -2446,6 +2446,25 @@ describe('bucket', () => {
 
   });
 
+  test('with autoDeleteObjects produces Lambda function with tags', () => {
+    const stack = new cdk.Stack();
+    cdk.Tags.of(stack).add('test-tag', 'test-value');
+
+    new s3.Bucket(stack, 'MyBucket', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    expect(stack).toHaveResourceLike('AWS::Lambda::Function', {
+      Tags: [
+        {
+          Key: 'test-tag',
+          Value: 'test-value',
+        },
+      ],
+    });
+  });
+
   test('with autoDeleteObjects on multiple buckets', () => {
     const stack = new cdk.Stack();
 
